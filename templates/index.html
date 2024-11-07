@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PronounceBetter</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>PronounceBetter</h1>
+        <h4>Visual Demo | 2024-11-7</h4>
+        <div class="transcription">
+            <h2>Live Transcription</h2>
+            <div id="transcription">Waiting for transcription...</div>
+        </div>
+        <div>
+            <h2>Active Reference</h2>
+            <div id="current-sentence" class="current-sentence">None</div>
+        </div>
+        <div>
+            <h2>Mispronunciations</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Expected Word</th>
+                        <th>Mispronounced Words</th>
+                        <th>Audio Feedback</th>
+                    </tr>
+                </thead>
+                <tbody id="mispronunciations"></tbody>
+            </table>
+        </div>
+        <div>
+            <h2>Reference Script</h2>
+            <ul id="script-sentences"></ul>
+        </div>
+    </div>
+    <script>
+        const transcriptionDiv = document.getElementById('transcription');
+        const currentSentenceDiv = document.getElementById('current-sentence');
+        const mispronunciationsTable = document.getElementById('mispronunciations');
+        const scriptSentencesList = document.getElementById('script-sentences');
+
+        fetch('/script_sentences')
+            .then(response => response.json())
+            .then(sentences => {
+                scriptSentencesList.innerHTML = sentences.map(sentence => `<li>${sentence}</li>`).join('');
+            });
+
+        const eventSource = new EventSource('/transcription');
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+
+            if (data.transcription !== undefined) {
+                transcriptionDiv.textContent = `${data.transcription}`;
+            }
+
+            if (data.colored_sentence) {
+                currentSentenceDiv.innerHTML = data.colored_sentence.map(wordObj => {
+                    return `<span class="${wordObj.status}">${wordObj.word}</span>`;
+                }).join(' ');
+            }
+
+            if (data.mispronunciations) {
+                mispronunciationsTable.innerHTML = '';
+                for (const [expected, mispronounced] of Object.entries(data.mispronunciations)) {
+                    const row = document.createElement('tr');
+                    const audioButton = `<button onclick="requestAudio('${expected}')">Play</button>`;
+                    row.innerHTML = `<td>${expected}</td><td>${mispronounced.join(', ')}</td><td>${audioButton}</td>`;
+                    mispronunciationsTable.appendChild(row);
+                }
+            }
+        };
+
+        function requestAudio(word) {
+            fetch(`/play_audio/${word}`, { method: "POST" })
+                .then(response => {
+                    if (!response.ok) {
+                        console.error(`Failed to play audio for '${word}': ${response.statusText}`);
+                    }
+                })
+                .catch(err => console.error(`Error: ${err}`));
+        }
+    </script>
+</body>
+</html>
